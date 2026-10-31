@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System;
+using ProfNastavnik.Security;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProfNastavnik.DTO;
 using ProfNastavnik.Models;
@@ -9,6 +11,7 @@ namespace ProfNastavnik.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [TokenAuth]
     public class CompanyController : ControllerBase
     {
        
@@ -17,6 +20,8 @@ namespace ProfNastavnik.Controllers
         [HttpGet("GetCompanyCard/{id}")]
         public ActionResult Get(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext()) 
             {
                 Director directory = context.Directors.FirstOrDefault(x=>x.IdDirector==id);
@@ -32,19 +37,37 @@ namespace ProfNastavnik.Controllers
                 }
                 return NotFound();
              }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.Get");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetCompany/{email}")]
         public ActionResult GetUser(string email)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 Director user = context.Directors.FirstOrDefault(x => x.EmailDirector == email);
                 return user != null ? Ok(user) : NotFound("компания не найден");
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.GetUser");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpPost("SaveCompanyProfile/{id}")]
         public ActionResult SaveCompanyProfile(int id, [FromBody] Director newdirector)
         {
+            try
+            {
+            if (!AuthContext.IsSelfOrAdmin(HttpContext, "company", id))
+                return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                 Director user = context.Directors.FirstOrDefault(x => x.IdDirector == id);
@@ -81,30 +104,54 @@ namespace ProfNastavnik.Controllers
                 context.SaveChanges();
                 return Ok(user);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.SaveCompanyProfile");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetCompanyFeedback/{id}")]
         public ActionResult GetCompanyFeedback(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 List<FeedbacksUser> directory = context.FeedbacksUsers.Where(x => x.IdCompany == id && x.StatusFeedbackUser!="Удален").ToList();
                
                 return directory.Count()>0 ? Ok(directory) : NotFound("");
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.GetCompanyFeedback");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetCompanyFeedbackToUser/{id}")]
         public ActionResult GetCompanyFeedbackToUser(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 List<FeedbacksCompany> directory = context.FeedbacksCompanies.Where(x => x.IdCompany == id && x.StatusFeedbackCompany!="Удален").ToList();
 
                 return directory.Count() > 0 ? Ok(directory) : NotFound("");
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.GetCompanyFeedbackToUser");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpDelete("DeleteGetCompanyFeedbackToUser/{id}")]
         public ActionResult DeleteGetCompanyFeedbackToUser(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 FeedbacksCompany directory = context.FeedbacksCompanies.FirstOrDefault(x => x.IdFeedbackCompany == id);
@@ -116,10 +163,18 @@ namespace ProfNastavnik.Controllers
                 context.SaveChanges();
                 return Ok(directory);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.DeleteGetCompanyFeedbackToUser");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetCompanyIntership/{id}")]
         public ActionResult GetCompanyIntership(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 List<Intership> directory = context.Interships.Where(x => x.IdCompany == id).ToList();
@@ -129,10 +184,18 @@ namespace ProfNastavnik.Controllers
                 }
                 return Ok(directory);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.GetCompanyIntership");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpPost("CompanyFeddback")]
         public ActionResult CompanyFeddback(FeedbacksCompany f)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 FeedbacksCompany old = context.FeedbacksCompanies.FirstOrDefault(x => x.IdCompany == f.IdCompany && x.IdUser == f.IdUser && x.IdVacancy == f.IdVacancy);
@@ -148,20 +211,36 @@ namespace ProfNastavnik.Controllers
                 context.SaveChanges();
                 return Ok(f);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.CompanyFeddback");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetCompanyMessages/{id}")]
         public ActionResult GetUserMessages(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 List<Chat> interships = context.Chats.Where(x => x.IdDirector == id && (x.SenderChat == "Стажер" || x.SenderChat=="Админ") && x.StatusChat != "Прочитано").ToList();
 
                 return Ok(interships.Count);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.GetUserMessages");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetCompanyVacancies/{id}")]
         public ActionResult GetRecommendationsIntership(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 List<Vacancy> itog = context.Vacancies.Include(x=>x.CurrencyVacancyNavigation).Where(x => x.IdCompany == id && (x.StatusVacancy == "Активна" || x.StatusVacancy== "На модерации")).ToList();
@@ -178,10 +257,18 @@ namespace ProfNastavnik.Controllers
 
                 return list2.Count() > 0 ? Ok(list2) : NotFound("вакансии не найдены");
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.GetRecommendationsIntership");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetCompanyResponcies/{id}")]
         public ActionResult GetCompanyResponcies(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 List<Response> itog = context.Responses.Include(x=>x.IdUserNavigation).Include(x=>x.IdVacancyNavigation).Where(x => x.IdCompany == id && x.StatusResponse == "Рассматривается").ToList();
@@ -199,10 +286,18 @@ namespace ProfNastavnik.Controllers
 
                 return list2.Count() > 0 ? Ok(list2) : NotFound("отклики не найдены");
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.GetCompanyResponcies");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetCompanyChats/{id}")]
         public ActionResult GetUserChats(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 var chats = context.Chats.Include(x => x.IdVacancyNavigation).Include(x => x.IdDirectorNavigation).Include(x => x.IdUserNavigation)
@@ -223,10 +318,20 @@ namespace ProfNastavnik.Controllers
 
                 return itog.Count > 0 ? Ok(itog) : NotFound("чаты не найдены");
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.GetUserChats");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpDelete("DeleteCompany/{id}")]
         public ActionResult DeleteCompany(int id)
         {
+            try
+            {
+            if (!AuthContext.IsSelfOrAdmin(HttpContext, "company", id))
+                return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                 Director director = context.Directors.FirstOrDefault(x => x.IdDirector == id);
@@ -263,10 +368,18 @@ namespace ProfNastavnik.Controllers
                 context.SaveChanges();
                 return Ok(director);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.DeleteCompany");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetAllCompanyTarrifs")]
         public ActionResult GetAllCompanyTarrifs()
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 List<PricesForCompany> pr = context.PricesForCompanies.ToList();
@@ -277,10 +390,18 @@ namespace ProfNastavnik.Controllers
                
                 return Ok(pr);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.GetAllCompanyTarrifs");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetCompanyTarriff/{id}")]
         public ActionResult GetCompanyTarriff(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 CompanyPrice pr = context.CompanyPrices.FirstOrDefault(x=>x.IdCompany==id);
@@ -289,14 +410,31 @@ namespace ProfNastavnik.Controllers
                     return NotFound("цены не найдены");
                 }
 
-                return Ok(pr);
+                // Возвращаем ДЕЙСТВУЮЩИЙ тариф: если оплата старше месяца, это бесплатный «Базовый»
+                var tariff = TariffService.Compute(context, "company", id);
+                return Ok(new CompanyPrice { Id = pr.Id, IdCompany = pr.IdCompany, IdPrice = tariff.TariffId });
+            }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.GetCompanyTarriff");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
             }
         }
         [HttpGet("GetTopStudents/{companyId}")]
         public ActionResult GetTopStudents(int companyId)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "company", companyId))
+                    return StatusCode(403, "Нет доступа");
+                if (AuthContext.Get(HttpContext)?.Role != "admin")
+                {
+                    var tariff = TariffService.Compute(context, "company", companyId);
+                    if (!tariff.TopStudents) return StatusCode(403, tariff.Locked("Доступ к топ 10% студентов"));
+                }
                 var companyVacancies = context.Vacancies
                     .Where(x => x.IdCompany == companyId && x.StatusVacancy == "Активна")
                     .ToList();
@@ -402,10 +540,19 @@ namespace ProfNastavnik.Controllers
 
                 return topStudents.Any() ? Ok(topStudents) : NotFound("Студенты не найдены");
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.GetTopStudents");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
+        [PublicEndpoint]
         [HttpPost("CreateDirector")]
         public ActionResult CreateDirector([FromBody] Director director)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 director.IdDirector = context.Directors.Any() ? context.Directors.Max(x => x.IdDirector) + 1 : 1;
@@ -424,6 +571,12 @@ namespace ProfNastavnik.Controllers
                 context.SaveChanges();
 
                 return Ok(director);
+            }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.CreateDirector");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
             }
         }
 
@@ -447,6 +600,8 @@ namespace ProfNastavnik.Controllers
         [HttpGet("GetCompanyResponsesCount/{companyId}")]
         public ActionResult GetCompanyResponsesCount(int companyId)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 var date = new DateOnly(DateTime.Today.Year, DateTime.Today.Month, 1);
@@ -455,94 +610,126 @@ namespace ProfNastavnik.Controllers
                     .Count();
                 return Ok(count);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.GetCompanyResponsesCount");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpPost("SearchStudents")]
         public ActionResult SearchStudents([FromBody] StudentSearchFilters filters)
         {
-            using (var context = new ProfnastavnikContext())
+            try
             {
-                var query = context.Students
-                    .Include(x => x.UniversityStudentNavigation).Where(x=>x.StatusStudent=="Активен")
-                    .AsQueryable();
-
-                if (!string.IsNullOrEmpty(filters.FullName))
+                var auth = AuthContext.Get(HttpContext);
+                if (auth == null) return StatusCode(401, "Требуется авторизация");
+                using (var context = new ProfnastavnikContext())
                 {
-                    query = query.Where(x =>
-                        (x.NameStudent != null && x.NameStudent.Contains(filters.FullName)) ||
-                        (x.SurnameStudent != null && x.SurnameStudent.Contains(filters.FullName)) ||
-                        (x.PatronymicStudent != null && x.PatronymicStudent.Contains(filters.FullName))
-                    );
-                }
-
-                if (filters.MinCourse.HasValue)
-                {
-                    query = query.Where(x => x.CourseStudent >= filters.MinCourse);
-                }
-                if (filters.MaxCourse.HasValue)
-                {
-                    query = query.Where(x => x.CourseStudent <= filters.MaxCourse);
-                }
-
-                if (!string.IsNullOrEmpty(filters.University))
-                {
-                    query = query.Where(x =>
-                        x.UniversityStudentNavigation != null &&
-                        x.UniversityStudentNavigation.NameUniversity == filters.University
-                    );
-                }
-
-                var students = query.ToList();
-                var result = new List<StudentSearchResult>();
-
-                foreach (var student in students)
-                {
-                    var skills = context.UserSkills
-                        .Include(x => x.IdSkillNavigation)
-                        .Where(x => x.IdUser == student.IdStudent)
-                        .Select(x => x.IdSkillNavigation.NameSkill)
-                        .ToList();
-
-                    var professions = context.UserProfessions
-                        .Include(x => x.IdProfessionNavigation)
-                        .Where(x => x.IdUser == student.IdStudent)
-                        .Select(x => x.IdProfessionNavigation.NameProfession)
-                        .ToList();
-
-                    if (filters.Skills != null && filters.Skills.Any())
+                    // «Поиск стажёров» входит только в корпоративный тариф
+                    if (auth.Role != "admin")
                     {
-                        var hasAllSkills = filters.Skills.All(skill => skills.Contains(skill));
-                        if (!hasAllSkills) continue;
+                        if (auth.Role != "company") return StatusCode(403, "Нет доступа");
+                        var tariff = TariffService.Compute(context, "company", auth.UserId);
+                        if (!tariff.SearchStudents) return StatusCode(403, tariff.Locked("Поиск стажёров"));
                     }
 
-                    if (filters.Professions != null && filters.Professions.Any())
+                    filters = filters ?? new StudentSearchFilters();
+                    var query = context.Students
+                        .Include(x => x.UniversityStudentNavigation)
+                        .Where(x => x.StatusStudent == "Активен");
+
+                    // ФИО: каждое слово запроса должно встретиться в имени, фамилии или отчестве (без учёта регистра).
+                    // Раньше запрос «Иванов Иван» целиком не находил никого, и регистр учитывался.
+                    if (!string.IsNullOrWhiteSpace(filters.FullName))
                     {
-                        var hasAnyProfession = filters.Professions.Any(prof => professions.Contains(prof));
-                        if (!hasAnyProfession) continue;
+                        foreach (var word in filters.FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            string w = word.ToLower();
+                            query = query.Where(x =>
+                                (x.NameStudent ?? "").ToLower().Contains(w) ||
+                                (x.SurnameStudent ?? "").ToLower().Contains(w) ||
+                                (x.PatronymicStudent ?? "").ToLower().Contains(w));
+                        }
                     }
 
-                    var fullName = $"{student.SurnameStudent} {student.NameStudent} {student.PatronymicStudent}".Trim();
+                    if (filters.MinCourse.HasValue) query = query.Where(x => x.CourseStudent >= filters.MinCourse);
+                    if (filters.MaxCourse.HasValue) query = query.Where(x => x.CourseStudent <= filters.MaxCourse);
 
-                    result.Add(new StudentSearchResult
+                    if (!string.IsNullOrWhiteSpace(filters.University))
                     {
-                        IdStudent = student.IdStudent,
-                        FullName = fullName,
-                        EmailStudent = student.EmailStudent,
-                        CourseStudent = student.CourseStudent,
-                        FacultatyStudent = student.FacultatyStudent,
-                        UniversityStudent = student.UniversityStudentNavigation?.NameUniversity,
-                        Skills = skills,
-                        Professions = professions
-                    });
-                }
+                        string uni = filters.University.Trim().ToLower();
+                        query = query.Where(x => x.UniversityStudentNavigation != null &&
+                                                 (x.UniversityStudentNavigation.NameUniversity ?? "").ToLower() == uni);
+                    }
 
-                return result.Any() ? Ok(result) : NotFound("студенты не найдены");
+                    var students = query.ToList();
+                    var sids = students.Select(x => x.IdStudent).ToList();
+
+                    // Навыки и профессии всех найденных студентов одним запросом (раньше по 2 запроса на студента)
+                    var skillMap = context.UserSkills.Include(x => x.IdSkillNavigation)
+                        .Where(x => x.IdUser != null && sids.Contains(x.IdUser.Value)).ToList()
+                        .GroupBy(x => x.IdUser.Value)
+                        .ToDictionary(g => g.Key, g => g.Select(x => x.IdSkillNavigation?.NameSkill).Where(v => v != null).Select(v => v!).ToList());
+                    var profMap = context.UserProfessions.Include(x => x.IdProfessionNavigation)
+                        .Where(x => x.IdUser != null && sids.Contains(x.IdUser.Value)).ToList()
+                        .GroupBy(x => x.IdUser.Value)
+                        .ToDictionary(g => g.Key, g => g.Select(x => x.IdProfessionNavigation?.NameProfession).Where(v => v != null).Select(v => v!).ToList());
+
+                    var result = new List<StudentSearchResult>();
+                    foreach (var student in students)
+                    {
+                        skillMap.TryGetValue(student.IdStudent, out var skills);
+                        profMap.TryGetValue(student.IdStudent, out var professions);
+                        skills = skills ?? new List<string>();
+                        professions = professions ?? new List<string>();
+
+                        // нужны ВСЕ выбранные навыки, регистр не важен
+                        if (filters.Skills != null && filters.Skills.Any() &&
+                            !filters.Skills.All(sk => skills.Contains(sk, StringComparer.OrdinalIgnoreCase))) continue;
+
+                        // достаточно ОДНОЙ из выбранных профессий
+                        if (filters.Professions != null && filters.Professions.Any() &&
+                            !filters.Professions.Any(p => professions.Contains(p, StringComparer.OrdinalIgnoreCase))) continue;
+
+                        var fullName = $"{student.SurnameStudent} {student.NameStudent} {student.PatronymicStudent}".Trim();
+                        result.Add(new StudentSearchResult
+                        {
+                            IdStudent = student.IdStudent,
+                            FullName = fullName,
+                            EmailStudent = student.EmailStudent,
+                            CourseStudent = student.CourseStudent,
+                            FacultatyStudent = student.FacultatyStudent,
+                            UniversityStudent = student.UniversityStudentNavigation?.NameUniversity,
+                            Skills = skills,
+                            Professions = professions
+                        });
+                    }
+
+                    result = result.OrderBy(x => x.FullName).ToList();
+                    return result.Any() ? Ok(result) : NotFound("студенты не найдены");
+                }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.SearchStudents");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
             }
         }
         [HttpGet("GetPriorityResponses/{companyId}")]
         public ActionResult GetPriorityResponses(int companyId)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "company", companyId))
+                    return StatusCode(403, "Нет доступа");
+                if (AuthContext.Get(HttpContext)?.Role != "admin")
+                {
+                    var tariff = TariffService.Compute(context, "company", companyId);
+                    if (!tariff.PriorityResponses) return StatusCode(403, tariff.Locked("Приоритетные отклики студентов"));
+                }
                 var responses = context.Responses
                     .Include(x => x.IdUserNavigation)
                     .Include(x => x.IdVacancyNavigation)
@@ -623,6 +810,12 @@ namespace ProfNastavnik.Controllers
 
                 return Ok(result);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.GetPriorityResponses");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
 
         public class PriorityResponseDTO
@@ -663,9 +856,14 @@ namespace ProfNastavnik.Controllers
         [HttpPost("AddNewCompanyPrice")]
         public ActionResult AddNewCompanyPrice(CompanyPrice s)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
+                if (s == null || !AuthContext.IsSelfOrAdmin(HttpContext, "company", s.IdCompany ?? 0))
+                    return StatusCode(403, "Нет доступа");
                 CompanyPrice current = context.CompanyPrices.FirstOrDefault(x => x.IdCompany == s.IdCompany);
+                if (current == null) return NotFound("Тариф компании не найден");
                 current.IdPrice = s.IdPrice;
                 CompanyPay cp = new CompanyPay()
                 {
@@ -679,6 +877,12 @@ namespace ProfNastavnik.Controllers
                 context.CompanyPays.Add(cp);
                 context.SaveChanges();
                 return Ok(current);
+            }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "CompanyController.AddNewCompanyPrice");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
             }
         }
 

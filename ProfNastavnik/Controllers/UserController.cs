@@ -1,4 +1,6 @@
-﻿
+﻿using System;
+using ProfNastavnik.Security;
+
 using MailKit.Security;
 using MimeKit;
 using Microsoft.AspNetCore.Mvc;
@@ -19,14 +21,23 @@ namespace ProfNastavnik.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [TokenAuth]
     public class UserController : ControllerBase
     {
 
        
 
+        [PublicEndpoint]
         [HttpPost("ResetPassword")]
         public ActionResult ResetPassword([FromBody] ResetPasswordRequest request)
         {
+            try
+            {
+            if (request == null || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.NewPassword))
+                return BadRequest("Некорректный запрос");
+            // Раньше код проверялся только в приложении, и любой мог сменить чужой пароль прямым запросом
+            if (!EmailVerifiedStore.Consume(request.Email))
+                return StatusCode(403, "Сначала подтвердите email кодом из письма");
             string hashedPassword = Sha256Hash(request.NewPassword);
 
             using (var context = new ProfnastavnikContext())
@@ -39,6 +50,12 @@ namespace ProfNastavnik.Controllers
                 context.SaveChanges();
                 return Ok();
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.ResetPassword");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
 
         public class ResetPasswordRequest
@@ -46,9 +63,12 @@ namespace ProfNastavnik.Controllers
             public string Email { get; set; }
             public string NewPassword { get; set; }
         }
+        [PublicEndpoint]
         [HttpPost("Authorization")]
         public ActionResult Post(User s)
         {
+            try
+            {
             string hashedPassword = Sha256Hash(s.PasswordUser);
 
             using (var context = new ProfnastavnikContext())
@@ -60,7 +80,7 @@ namespace ProfNastavnik.Controllers
                 }
                 if (user.RoleUser == "Администратор")
                 {
-                    return Ok(user);
+                    return IssueToken(user, "admin", 1);
                 }
                 Student st = context.Students.FirstOrDefault(x => x.EmailStudent == s.EmailUser);
                 Director d = context.Directors.FirstOrDefault(x => x.EmailDirector == s.EmailUser);
@@ -68,7 +88,7 @@ namespace ProfNastavnik.Controllers
                 {
                     if (st.StatusStudent == "Активен" || st.StatusStudent == "На модерации")
                     {
-                        return Ok(user);
+                        return IssueToken(user, "student", st.IdStudent);
                     }
                     return BadRequest("пользователь недействителен");
                 }
@@ -76,7 +96,7 @@ namespace ProfNastavnik.Controllers
                 {
                     if (d.StatusDirector == "Активен" || d.StatusDirector == "На модерации")
                     {
-                        return Ok(user);
+                        return IssueToken(user, "company", d.IdDirector);
                     }
                     return BadRequest("пользователь недействителен");
 
@@ -87,6 +107,22 @@ namespace ProfNastavnik.Controllers
                     return BadRequest("пользователь недействителен");
                 }
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.Post");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
+        }
+
+        // Выдача токена при успешном входе: токен уходит в заголовке X-Auth-Token,
+        // тело ответа остаётся прежним (User), поэтому старый клиент не ломается.
+        private ActionResult IssueToken(User user, string role, int id)
+        {
+            string token = TokenService.Issue(id, user.EmailUser ?? "", role);
+            HttpContext.Response.Headers["X-Auth-Token"] = token;
+            user.PasswordUser = "";   // хэш пароля клиенту отдавать не нужно
+            return Ok(user);
         }
 
         private string Sha256Hash(string input)
@@ -102,43 +138,81 @@ namespace ProfNastavnik.Controllers
         [HttpGet("GetUser/{email}")]
         public ActionResult GetUser(string email)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 Student user = context.Students.FirstOrDefault(x => x.EmailStudent == email);
                 return user != null ? Ok(user) : NotFound("пользователь не найден");
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.GetUser");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetUserById/{id}")]
         public ActionResult GetUser(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 Student user = context.Students.FirstOrDefault(x => x.IdStudent == id);
                 return user != null ? Ok(user) : NotFound("пользователь не найден");
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.GetUser");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetUserPrice/{id}")]
         public ActionResult GetUserPrice(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 UserPrice user = context.UserPrices.FirstOrDefault(x => x.IdUser == id);
-                return user != null ? Ok(user) : NotFound("не найден прайс");
+                if (user == null) return NotFound("не найден прайс");
+                // Возвращаем ДЕЙСТВУЮЩИЙ тариф: если оплата старше месяца, это бесплатный «Старт».
+                // Поэтому все экраны приложения, которые спрашивают тариф, автоматически учитывают срок оплаты.
+                var tariff = TariffService.Compute(context, "student", id);
+                return Ok(new UserPrice { Id = user.Id, IdUser = user.IdUser, IdPrices = tariff.TariffId });
+            }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.GetUserPrice");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
             }
         }
         [HttpGet("GetUserCountResponce/{id}")]
         public ActionResult GetUserCountResponce(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 DateOnly date = new DateOnly(DateTime.Today.Year, DateTime.Today.Month, 1);
-                List<Response> user = context.Responses.Where(x => x.IdUser == id && x.DateResponse>date).ToList();
+                List<Response> user = context.Responses.Where(x => x.IdUser == id && x.DateResponse>=date).ToList();
                 return user.Count()>0 ? Ok(user.Count) : NotFound("не найдены");
+            }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.GetUserCountResponce");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
             }
         }
         [HttpGet("GetUserChats/{id}")]
         public ActionResult GetUserChats(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 var chats = context.Chats.Include(x=>x.IdVacancyNavigation).Include(x=>x.IdDirectorNavigation).Include(x=>x.IdUserNavigation)
@@ -159,11 +233,19 @@ namespace ProfNastavnik.Controllers
 
                 return itog.Count > 0 ? Ok(itog) : NotFound("чаты не найдены");
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.GetUserChats");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
 
         [HttpGet("GetChatMessagesCompany/{id_user}/{id_company}/{id_vacancy}")]
         public ActionResult GetChatMessages(int id_user, int id_company, int id_vacancy)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 if (id_user != 0 && id_vacancy != 0)
@@ -191,10 +273,18 @@ namespace ProfNastavnik.Controllers
                     return itog.Count() > 0 ? Ok(itog) : NotFound("чаты не найдены");
                 }
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.GetChatMessages");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetChatMessagesCompanyAdmin/{id_company}/{email_admin}")]
         public ActionResult GetChatMessagesCompanyAdmin(int id_company, string email_admin)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 
@@ -209,10 +299,18 @@ namespace ProfNastavnik.Controllers
                     return itog.Count() > 0 ? Ok(itog) : NotFound("чаты не найдены");
                 
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.GetChatMessagesCompanyAdmin");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetChatMessagesAdmin/{id_user}/{email_admin}")]
         public ActionResult GetChatMessages(int id_user, string email_admin)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                
@@ -227,10 +325,18 @@ namespace ProfNastavnik.Controllers
                     return itog.Count() > 0 ? Ok(itog) : NotFound("чаты не найдены");
                 
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.GetChatMessages");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpPost("SendMessage")]
         public ActionResult SendMessage(Chat t)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 t.SendAtChat = DateTime.Now;
@@ -239,10 +345,18 @@ namespace ProfNastavnik.Controllers
                 context.SaveChanges();
                 return Ok(t);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.SendMessage");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetUserArchiveVacancies/{id}")]
         public ActionResult GetUserArchiveVacancies(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 List<Intership> list = context.Interships.Where(x => x.IdUser == id && x.StatusIntership == "Закончена").Include(x => x.IdVacancyNavigation).Include(x => x.IdVacancyNavigation.CurrencyVacancyNavigation).ToList();
@@ -259,10 +373,18 @@ namespace ProfNastavnik.Controllers
                 }).ToList();
                 return list2.Count() > 0 ? Ok(list2) : NotFound("архивные вакансии не найдены");
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.GetUserArchiveVacancies");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetUserFaivorities/{id}")]
         public ActionResult GetUserFaivorities(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 List<Favourity> list = context.Favourities.Where(x => x.IdUser == id).Include(x => x.IdVacancyNavigation).Include(x => x.IdVacancyNavigation.CurrencyVacancyNavigation).ToList();
@@ -279,10 +401,20 @@ namespace ProfNastavnik.Controllers
                 return list2.Count() > 0 ? Ok(list2) : NotFound("вакансии не найдены");
 
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.GetUserFaivorities");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpPut("DeleteUser/{id}")]
         public ActionResult DeleteUser(int id)
         {
+            try
+            {
+            if (!AuthContext.IsSelfOrAdmin(HttpContext, "student", id))
+                return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                 Student user = context.Students.FirstOrDefault(x => x.IdStudent == id);
@@ -308,10 +440,18 @@ namespace ProfNastavnik.Controllers
                 return Ok(user) ;
 
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.DeleteUser");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetAllUserProfile/{id}")]
         public ActionResult GetAllUserProfile(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 Student list = context.Students.Include(x=>x.UniversityStudentNavigation).FirstOrDefault(x => x.IdStudent == id);
@@ -350,10 +490,17 @@ namespace ProfNastavnik.Controllers
                 return all!=null ? Ok(all) : NotFound("пользователь не найдены");
 
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.GetAllUserProfile");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
 
 
 
+        [PublicEndpoint]
         [HttpPost("SendVerificationCode")]
         public ActionResult SendVerificationCode([FromBody] EmailRequest request)
         {
@@ -363,7 +510,7 @@ namespace ProfNastavnik.Controllers
                 VerificationCodeStorage.SaveCode(request.Email, code);
 
                 string fromEmail = "official.workship@mail.ru";
-                string password = "SSIuL9fn3p0HSDFSjTtW";
+                string password = Environment.GetEnvironmentVariable("SMTP_PASSWORD") ?? "";
                 string smtpServer = "smtp.mail.ru";
                 int port = 587;
 
@@ -406,22 +553,35 @@ namespace ProfNastavnik.Controllers
             }
         }
 
+        [PublicEndpoint]
         [HttpPost("VerifyCode")]
         public ActionResult VerifyCode([FromBody] VerifyCodeRequest request)
         {
+            try
+            {
             bool isValid = VerificationCodeStorage.VerifyCode(request.Email, request.Code);
 
             if (isValid)
             {
                 VerificationCodeStorage.RemoveCode(request.Email);
+                EmailVerifiedStore.Mark(request.Email);
                 return Ok(new { message = "Код успешно подтвержден" });
             }
 
             return BadRequest(new { message = "Неверный или истекший код" });
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.VerifyCode");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
+        [PublicEndpoint]
         [HttpPost("Register")]
         public ActionResult Register([FromBody] User user)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 var existingUser = context.Users.FirstOrDefault(x => x.EmailUser == user.EmailUser);
@@ -437,7 +597,14 @@ namespace ProfNastavnik.Controllers
                 
                 context.SaveChanges();
 
+                user.PasswordUser = "";
                 return Ok(user);
+            }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.Register");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
             }
         }
         public class EmailRequest
@@ -460,9 +627,12 @@ namespace ProfNastavnik.Controllers
             public bool IsUsed { get; set; }
         }
 
+        [PublicEndpoint]
         [HttpPost("CreateStudent")]
         public ActionResult CreateStudent([FromBody] Student student)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 student.IdStudent = context.Students.Any() ? context.Students.Max(x => x.IdStudent) + 1 : 1;
@@ -481,10 +651,22 @@ namespace ProfNastavnik.Controllers
 
                 return Ok(student);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.CreateStudent");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpPut("SaveUserProfile")]
         public ActionResult SaveUserProfile(AllUserprofile? alus)
         {
+            try
+            {
+            if (alus?.student == null)
+                return BadRequest("Пустой профиль");
+            if (!AuthContext.IsSelfOrAdmin(HttpContext, "student", alus.student.IdStudent))
+                return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                 var existingStudent = context.Students.FirstOrDefault(x => x.IdStudent == alus.student.IdStudent);
@@ -525,10 +707,11 @@ namespace ProfNastavnik.Controllers
 
                 context.SaveChanges();
                 int maxId = context.UserSkills.Any() ? context.UserSkills.Max(x => x.IdUserSkill) : 0;
-                foreach (var item in alus.Skills)
+                foreach (var item in (alus.Skills ?? new List<string>()))
                 {
                     maxId++;
                     Skill skilll = context.Skills.FirstOrDefault(x => x.NameSkill == item);
+                    if (skilll == null) { maxId--; continue; }
                     UserSkill skill = new UserSkill()
                     {
                         IdSkill = skilll.IdSkill,
@@ -543,10 +726,11 @@ namespace ProfNastavnik.Controllers
 
                 context.SaveChanges();
                 int maxId2 = context.UserProfessions.Any() ? context.UserProfessions.Max(x => x.IdUserProfession) : 0;
-                foreach (var item in alus.Proffesions)
+                foreach (var item in (alus.Proffesions ?? new List<string>()))
                 {
                     maxId2++;
                     Profession skilll = context.Professions.FirstOrDefault(x => x.NameProfession == item);
+                    if (skilll == null) { maxId2--; continue; }
                     UserProfession skill = new UserProfession()
                     {
                         IdProfession = skilll.IdProfession,
@@ -560,8 +744,9 @@ namespace ProfNastavnik.Controllers
                 context.StudentFiles.RemoveRange(sf);
                 int maxId3 = context.StudentFiles.Any() ? context.StudentFiles.Max(x => x.IdStudentFile) : 0;
                 context.SaveChanges();
-                foreach (var item in alus.StudentFiles)
+                foreach (var item in (alus.StudentFiles ?? new List<string>()))
                 {
+                    maxId3++;   // БЫЛО: у всех файлов был один и тот же ключ
 
                     StudentFile skill = new StudentFile()
                     {
@@ -578,11 +763,19 @@ namespace ProfNastavnik.Controllers
                 return existingStudent != null ? Ok(existingStudent) : NotFound("пользователь не найдены");
 
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.SaveUserProfile");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
 
         [HttpPost("AddFaivourites/{id_user}/{id_vacancy}")]
         public ActionResult AddFaivourites(int id_user, int id_vacancy)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 Favourity f = new Favourity()
@@ -595,10 +788,18 @@ namespace ProfNastavnik.Controllers
                 context.SaveChanges();
                 return Ok(true);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.AddFaivourites");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpDelete("DeleteFaivourites/{id_user}/{id_vacancy}")]
         public ActionResult DeleteFaivourites(int id_user, int id_vacancy)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 Favourity f = context.Favourities.FirstOrDefault(x => x.IdUser==id_user && x.IdVacancy==id_vacancy);
@@ -606,10 +807,18 @@ namespace ProfNastavnik.Controllers
                 context.SaveChanges();
                 return Ok(true);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.DeleteFaivourites");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("IfFavoutity/{id_user}/{id_vacancy}")]
         public ActionResult IfFavoutity(int id_user, int id_vacancy)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 Favourity f = context.Favourities.FirstOrDefault(x => x.IdUser == id_user && x.IdVacancy == id_vacancy);
@@ -623,19 +832,35 @@ namespace ProfNastavnik.Controllers
                 }
                  
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.IfFavoutity");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetDirector/{email}")]
         public ActionResult GetDirector(string email)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 Director user = context.Directors.FirstOrDefault(x => x.EmailDirector == email);
                 return user != null ? Ok(user) : NotFound("пользователь не найден");
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.GetDirector");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("UserVacancy/{id}")]
         public ActionResult UserVacancy(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 List<Intership> interships = context.Interships.Where(x => x.IdUser == id && x.StatusIntership == "Идет").Include(x => x.IdCompanyNavigation).Include(x => x.IdVacancyNavigation).ToList();
@@ -649,25 +874,47 @@ namespace ProfNastavnik.Controllers
                 }).ToList();
                 return list.Count()>0 ? Ok(list) : NotFound("вакансии не найдены");
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.UserVacancy");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetUserMessages/{id}")]
         public ActionResult GetUserMessages(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 List<Chat> interships = context.Chats.Where(x => x.IdUser == id && (x.SenderChat == "Работодатель" || x.SenderChat=="Админ" ) && x.StatusChat!="Прочитано").ToList();
 
                 return  Ok(interships.Count) ;
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.GetUserMessages");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetUserFeedback/{id}")]
         public ActionResult GetUserFeedback(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 List<FeedbacksCompany> directory = context.FeedbacksCompanies.Where(x => x.IdUser == id && x.StatusFeedbackCompany!="Удален").ToList();
 
                 return directory.Count() > 0 ? Ok(directory) : NotFound("");
+            }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "UserController.GetUserFeedback");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
             }
         }
 

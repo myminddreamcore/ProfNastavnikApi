@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System;
+using ProfNastavnik.Security;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProfNastavnik.Models;
 
@@ -8,6 +10,7 @@ namespace ProfNastavnik.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [TokenAuth]
     public class RequestController : ControllerBase
     {
         [HttpGet("GetUserRequests/{userId}")]

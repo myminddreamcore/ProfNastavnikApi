@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System;
+using ProfNastavnik.Security;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProfNastavnik.DTO;
 using ProfNastavnik.Models;
@@ -9,6 +11,7 @@ namespace ProfNastavnik.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [TokenAuth]
     public class VacancyController : ControllerBase
     {
        
@@ -17,6 +20,8 @@ namespace ProfNastavnik.Controllers
         [HttpGet("GetVacancy/{id}")]
         public ActionResult Get(int id)
         {
+            try
+            {
             using(var context = new ProfnastavnikContext())
             {
                 Vacancy vacancy = context.Vacancies.Include(x=>x.CurrencyVacancyNavigation).Include(x=>x.IdCompanyNavigation).FirstOrDefault(x=>x.IdVacancy == id);
@@ -57,12 +62,32 @@ namespace ProfNastavnik.Controllers
                 };
                 return vacancy != null ? Ok(cv) : NotFound("вакансия не найдена");
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "VacancyController.Get");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpPost("CreateVacancy")]
         public ActionResult CreateVacancy([FromBody] CreateVacancyDTO dto)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
+                if (dto?.Vacancy == null || dto.Adress == null)
+                    return BadRequest("Некорректные данные вакансии");
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "company", dto.Vacancy.IdCompany ?? 0))
+                    return StatusCode(403, "Нет доступа");
+                // Лимит вакансий по тарифу (Базовый: 1, Бизнес: 5, Корпоративный: без ограничений)
+                if (AuthContext.Get(HttpContext)?.Role != "admin")
+                {
+                    var tariff = TariffService.Compute(context, "company", dto.Vacancy.IdCompany ?? 0);
+                    if (tariff.MaxVacancies >= 0 && tariff.VacanciesUsed >= tariff.MaxVacancies)
+                        return StatusCode(403, tariff.LimitReached(tariff.MaxVacancies + " вакансий"));
+                }
+
                 var vacancy = context.Vacancies.FirstOrDefault(x =>
                     x.NameVacancy == dto.Vacancy.NameVacancy &&
                     x.IdCompany == dto.Vacancy.IdCompany);
@@ -174,10 +199,18 @@ namespace ProfNastavnik.Controllers
 
                 return Ok(dto.Vacancy);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "VacancyController.CreateVacancy");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpPut("ArchiveVacancy/{id}")]
         public ActionResult ArchiveVacancy(int id)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 var vacancy = context.Vacancies.FirstOrDefault(x =>
@@ -194,6 +227,12 @@ namespace ProfNastavnik.Controllers
                 context.SaveChanges();
 
                 return Ok(vacancy);
+            }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "VacancyController.ArchiveVacancy");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
             }
         }
 

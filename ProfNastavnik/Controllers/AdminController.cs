@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System;
+using ProfNastavnik.Security;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProfNastavnik.DTO;
 using ProfNastavnik.Models;
@@ -21,21 +23,32 @@ namespace ProfNastavnik.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [TokenAuth]
     public class AdminController : ControllerBase
     {
         [HttpGet("GetAdminMessages/{email}")]
         public ActionResult GetUserMessages(string email)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 List<Chat> interships = context.Chats.Where(x => x.EmailAdmin == email && (x.SenderChat == "Работодатель" || x.SenderChat == "Стажер") && x.StatusChat != "Прочитано").ToList();
 
                 return Ok(interships.Count);
             }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "AdminController.GetUserMessages");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
         }
         [HttpGet("GetAdminChats/{email}")]
         public ActionResult GetUserChats(string email)
         {
+            try
+            {
             using (var context = new ProfnastavnikContext())
             {
                 var chats = context.Chats
@@ -63,6 +76,12 @@ namespace ProfNastavnik.Controllers
                     .ToList();
 
                 return itog.Count > 0 ? Ok(itog) : NotFound("чаты не найдены");
+            }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "AdminController.GetUserChats");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
             }
         }
         public class TopCompanyDTO
@@ -140,6 +159,7 @@ namespace ProfNastavnik.Controllers
             public int ActiveInternships { get; set; }
             public double SuccessRate { get; set; }
         }
+        [TokenAuth(Roles = "admin")]
         [HttpGet("GetTopCompanies")]
         public async Task<ActionResult<List<TopCompanyDTO>>> GetTopCompanies()
         {
@@ -174,6 +194,7 @@ namespace ProfNastavnik.Controllers
             }
         }
 
+        [TokenAuth(Roles = "admin")]
         [HttpGet("GetTopStudents")]
         public async Task<ActionResult<List<TopStudentAdminDTO>>> GetTopStudents()
         {
@@ -215,6 +236,7 @@ namespace ProfNastavnik.Controllers
             }
         }
 
+        [TokenAuth(Roles = "admin")]
         [HttpGet("GetTopUniversities")]
         public async Task<ActionResult<List<TopUniversityDTO>>> GetTopUniversities()
         {
@@ -244,6 +266,7 @@ namespace ProfNastavnik.Controllers
             }
         }
 
+        [TokenAuth(Roles = "admin")]
         [HttpGet("GetPaymentsChart")]
         public async Task<ActionResult<List<PaymentChartDTO>>> GetPaymentsChart()
         {
@@ -302,6 +325,7 @@ namespace ProfNastavnik.Controllers
             }
         }
 
+        [TokenAuth(Roles = "admin")]
         [HttpGet("GetStudentPaymentsChart")]
         public async Task<ActionResult<List<StudentPaymentChartDTO>>> GetStudentPaymentsChart()
         {
@@ -348,6 +372,7 @@ namespace ProfNastavnik.Controllers
             }
         }
 
+        [TokenAuth(Roles = "admin")]
         [HttpGet("GetCompanyPaymentsChart")]
         public async Task<ActionResult<List<CompanyPaymentChartDTO>>> GetCompanyPaymentsChart()
         {
@@ -394,6 +419,7 @@ namespace ProfNastavnik.Controllers
             }
         }
 
+        [TokenAuth(Roles = "admin")]
         [HttpGet("GetNewUsersChart")]
         public async Task<ActionResult<List<NewUsersChartDTO>>> GetNewUsersChart()
         {
@@ -434,6 +460,7 @@ namespace ProfNastavnik.Controllers
             }
         }
 
+        [TokenAuth(Roles = "admin")]
         [HttpGet("GetUserChurnChart")]
         public async Task<ActionResult<List<UserChurnChartDTO>>> GetUserChurnChart()
         {
@@ -474,6 +501,7 @@ namespace ProfNastavnik.Controllers
                 return StatusCode(500, $"Ошибка: {ex.Message}");
             }
         }
+        [TokenAuth(Roles = "admin")]
         [HttpGet("GetSuccessInternshipsChart")]
         public async Task<ActionResult<List<SuccessInternshipChartDTO>>> GetSuccessInternshipsChart()
         {
@@ -514,6 +542,7 @@ namespace ProfNastavnik.Controllers
             }
         }
 
+        [TokenAuth(Roles = "admin")]
         [HttpGet("GetDashboardStats")]
         public async Task<ActionResult<DashboardStatsDTO>> GetDashboardStats()
         {
@@ -566,6 +595,7 @@ namespace ProfNastavnik.Controllers
             public string? Photo { get; set; }
         }
 
+        [TokenAuth(Roles = "admin")]
         [HttpPost("Search")]
         public async Task<ActionResult<List<AdminSearchResult>>> Search([FromBody] AdminSearchFilters filters)
         {
@@ -799,6 +829,7 @@ namespace ProfNastavnik.Controllers
                 return StatusCode(500, $"Ошибка: {ex.Message}");
             }
         }
+        [TokenAuth(Roles = "admin")]
         [HttpPut("UpdateUserStatus/{userId}/{status}")]
         public async Task<ActionResult> UpdateUserStatus(int userId, string status)
         {
@@ -862,6 +893,7 @@ namespace ProfNastavnik.Controllers
             }
         }
 
+        [TokenAuth(Roles = "admin")]
         [HttpPut("UpdateCompanyStatus/{companyId}/{status}")]
         public async Task<ActionResult> UpdateCompanyStatus(int companyId, string status)
         {
@@ -925,6 +957,7 @@ namespace ProfNastavnik.Controllers
             }
         }
 
+        [TokenAuth(Roles = "admin")]
         [HttpPut("UpdateVacancyStatus/{vacancyId}/{status}")]
         public async Task<ActionResult> UpdateVacancyStatus(int vacancyId, string status)
         {
@@ -992,6 +1025,7 @@ namespace ProfNastavnik.Controllers
             }
         }
 
+        [TokenAuth(Roles = "admin")]
         [HttpPut("UpdateFeedbackCompanyStatus/{feedbackId}/{status}")]
         public async Task<ActionResult> UpdateFeedbackCompanyStatus(int feedbackId, string status)
         {
@@ -1059,6 +1093,7 @@ namespace ProfNastavnik.Controllers
             }
         }
 
+        [TokenAuth(Roles = "admin")]
         [HttpPut("UpdateFeedbackUserStatus/{feedbackId}/{status}")]
         public async Task<ActionResult> UpdateFeedbackUserStatus(int feedbackId, string status)
         {
@@ -1220,6 +1255,7 @@ namespace ProfNastavnik.Controllers
             public string Date { get; set; }
         }
 
+        [TokenAuth(Roles = "admin")]
         [HttpGet("GetModerationItems")]
         public async Task<ActionResult<ModerationItems>> GetModerationItems()
         {
