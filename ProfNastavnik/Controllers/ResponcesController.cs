@@ -10,6 +10,7 @@ using ProfNastavnik.Models;
 namespace ProfNastavnik.Controllers
 {
     [Route("api/[controller]")]
+    [Route("api/v1/[controller]")]
     [ApiController]
     [TokenAuth]
     public class ResponcesController : ControllerBase
@@ -57,7 +58,6 @@ namespace ProfNastavnik.Controllers
                 {
                     return BadRequest("вы уже откликались на эту вакансию");
                 }
-                // Лимит откликов в месяц по тарифу («Старт»: 5, «Профи»: без ограничений)
                 if (s.IdUser == null) return BadRequest("Не указан пользователь");
                 if (!AuthContext.IsSelfOrAdmin(HttpContext, "student", s.IdUser.Value))
                     return StatusCode(403, "Нет доступа");
@@ -117,9 +117,9 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (filter == null) return BadRequest("Пустой фильтр");
                 using (var context = new ProfnastavnikContext())
                 {
-                    // Кто ищет, берём из токена (студент не может искать «от имени» другого)
                     var auth = AuthContext.Get(HttpContext);
                     if (auth != null && auth.Role == "student") filter.iduser = auth.UserId;
 
@@ -128,7 +128,6 @@ namespace ProfNastavnik.Controllers
                         .Include(x => x.Adresses)
                         .Where(x => x.StatusVacancy == "Активна");
 
-                    // Поиск по названию И описанию, без учёта регистра
                     if (!string.IsNullOrWhiteSpace(filter.name))
                     {
                         string n = filter.name.Trim().ToLower();
@@ -141,9 +140,6 @@ namespace ProfNastavnik.Controllers
                         query = query.Where(x => x.AnybodyVacancy == filter.user.Value);
                     }
 
-                    // Зарплата: диапазон вакансии должен ПЕРЕСЕКАТЬСЯ с желаемым диапазоном.
-                    // Раньше требовалось, чтобы вакансия целиком лежала внутри диапазона, и многие подходящие пропадали;
-                    // вакансии без верхней границы тоже терялись.
                     if (filter.zenstart.HasValue)
                     {
                         var min = filter.zenstart.Value;
@@ -164,12 +160,10 @@ namespace ProfNastavnik.Controllers
                     var list = query.ToList();
                     var ids = list.Select(x => x.IdVacancy).ToList();
 
-                    // Вакансии, на которые студент уже откликнулся, не показываем (один запрос вместо запроса на каждую вакансию)
                     var already = context.Responses
                         .Where(x => x.IdUser == filter.iduser && x.IdVacancy != null && ids.Contains(x.IdVacancy.Value))
                         .Select(x => x.IdVacancy.Value).ToList().ToHashSet();
 
-                    // Справочники по всем найденным вакансиям загружаем сразу, без запросов в цикле
                     var formatMap = context.VacanciesFormats.Include(x => x.IdFormatNavigation)
                         .Where(x => x.IdVacancy != null && ids.Contains(x.IdVacancy.Value)).ToList()
                         .GroupBy(x => x.IdVacancy.Value)
@@ -402,7 +396,6 @@ namespace ProfNastavnik.Controllers
                     return StatusCode(403, "Нет доступа");
                 if (AuthContext.Get(HttpContext)?.Role != "admin" && r.IdCompany != null)
                 {
-                    // Обрабатывать можно только первые N откликов месяца (Базовый: 5, Бизнес: 20, Корпоративный: все)
                     var tariff = TariffService.Compute(context, "company", r.IdCompany.Value);
                     if (tariff.MaxResponsesPerMonth >= 0)
                     {

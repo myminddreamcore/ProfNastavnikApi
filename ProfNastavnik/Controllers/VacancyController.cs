@@ -10,6 +10,7 @@ using ProfNastavnik.Models;
 namespace ProfNastavnik.Controllers
 {
     [Route("api/[controller]")]
+    [Route("api/v1/[controller]")]
     [ApiController]
     [TokenAuth]
     public class VacancyController : ControllerBase
@@ -80,7 +81,6 @@ namespace ProfNastavnik.Controllers
                     return BadRequest("Некорректные данные вакансии");
                 if (!AuthContext.IsSelfOrAdmin(HttpContext, "company", dto.Vacancy.IdCompany ?? 0))
                     return StatusCode(403, "Нет доступа");
-                // Лимит вакансий по тарифу (Базовый: 1, Бизнес: 5, Корпоративный: без ограничений)
                 if (AuthContext.Get(HttpContext)?.Role != "admin")
                 {
                     var tariff = TariffService.Compute(context, "company", dto.Vacancy.IdCompany ?? 0);
@@ -206,6 +206,73 @@ namespace ProfNastavnik.Controllers
                 return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
             }
         }
+        // GET api/Vacancy/GetArchivedVacancies/5: архивные вакансии компании
+        [HttpGet("GetArchivedVacancies/{companyId}")]
+        public ActionResult GetArchivedVacancies(int companyId)
+        {
+            try
+            {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "company", companyId))
+                    return StatusCode(403, "Нет доступа");
+                using (var context = new ProfnastavnikContext())
+                {
+                    var list = context.Vacancies.Include(x => x.CurrencyVacancyNavigation)
+                        .Where(x => x.IdCompany == companyId && x.StatusVacancy == "Архив")
+                        .OrderByDescending(x => x.IdVacancy)
+                        .ToList()
+                        .Select(x => new ListIntership
+                        {
+                            idVacancy = x.IdVacancy,
+                            NameVacancy = x.NameVacancy,
+                            ZenStart = x.ZenStartVacancy,
+                            Currency = x.CurrencyVacancyNavigation?.NameCurrency,
+                            ZenEnd = x.ZenEndVacancy,
+                            Time = x.TimeVacancy
+                        }).ToList();
+                    return Ok(list);   
+                }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "VacancyController.GetArchivedVacancies");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
+        }
+
+        // PUT api/Vacancy/RestoreVacancy/12: вернуть вакансию из архива (с учётом лимита вакансий тарифа)
+        [HttpPut("RestoreVacancy/{id}")]
+        public ActionResult RestoreVacancy(int id)
+        {
+            try
+            {
+                using (var context = new ProfnastavnikContext())
+                {
+                    var vacancy = context.Vacancies.FirstOrDefault(x => x.IdVacancy == id);
+                    if (vacancy == null) return NotFound("вакансия не найдена");
+                    if (!AuthContext.IsSelfOrAdmin(HttpContext, "company", vacancy.IdCompany ?? 0))
+                        return StatusCode(403, "Нет доступа");
+                    if (vacancy.StatusVacancy != "Архив")
+                        return BadRequest("Вакансия не находится в архиве");
+
+                    if (AuthContext.Get(HttpContext)?.Role != "admin")
+                    {
+                        var tariff = TariffService.Compute(context, "company", vacancy.IdCompany ?? 0);
+                        if (tariff.MaxVacancies >= 0 && tariff.VacanciesUsed >= tariff.MaxVacancies)
+                            return StatusCode(403, tariff.LimitReached(tariff.MaxVacancies + " вакансий"));
+                    }
+
+                    vacancy.StatusVacancy = "Активна";
+                    context.SaveChanges();
+                    return Ok(new { idVacancy = vacancy.IdVacancy, status = vacancy.StatusVacancy });
+                }
+            }
+            catch (Exception __ex)
+            {
+                ApiErrors.Log(__ex, "VacancyController.RestoreVacancy");
+                return StatusCode(500, "Внутренняя ошибка сервера. Попробуйте позже.");
+            }
+        }
+
         [HttpPut("ArchiveVacancy/{id}")]
         public ActionResult ArchiveVacancy(int id)
         {
@@ -220,7 +287,8 @@ namespace ProfNastavnik.Controllers
                 {
                     return NotFound("вакансия не найдена");
                 }
-
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "company", vacancy.IdCompany ?? 0))
+                    return StatusCode(403, "Нет доступа");
 
                 vacancy.StatusVacancy = "Архив";
                 

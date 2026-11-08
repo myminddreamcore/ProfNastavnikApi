@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+
 namespace ProfNastavnik.Models;
 
 public partial class Adress

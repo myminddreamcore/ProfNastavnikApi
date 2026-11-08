@@ -4,21 +4,19 @@ using ProfNastavnik.Models;
 
 namespace ProfNastavnik.Security
 {
-    /// <summary>Действующий тариф пользователя с учётом срока оплаты и все его лимиты.</summary>
     public class TariffStatus
     {
         public string Role { get; set; } = "";
-        public int TariffId { get; set; } = 1;              // ДЕЙСТВУЮЩИЙ тариф (после просрочки становится бесплатным)
+        public int TariffId { get; set; } = 1;              
         public string TariffName { get; set; } = "";
-        public bool IsPaid { get; set; }                    // платный тариф оплачен и ещё действует
-        public string? ValidUntil { get; set; }             // "yyyy-MM-dd"
+        public bool IsPaid { get; set; }                    
+        public string? ValidUntil { get; set; }             
         public int DaysLeft { get; set; }
-        public bool IsExpired { get; set; }                 // платный тариф был, но оплата старше месяца
+        public bool IsExpired { get; set; }                
         public int? ExpiredTariffId { get; set; }
         public string? ExpiredTariffName { get; set; }
         public int DaysOverdue { get; set; }
 
-        // Лимиты (-1 = без ограничений)
         public int MaxVacancies { get; set; } = -1;
         public int MaxResponsesPerMonth { get; set; } = -1;
         public bool Chatbot { get; set; }
@@ -27,7 +25,6 @@ namespace ProfNastavnik.Security
         public bool SearchStudents { get; set; }
         public bool InviteStudents { get; set; }
 
-        // Использовано
         public int VacanciesUsed { get; set; }
         public int ResponsesUsed { get; set; }
 
@@ -46,12 +43,7 @@ namespace ProfNastavnik.Security
         }
     }
 
-    /// <summary>
-    /// Единое место, где определяется, какой тариф действует СЕЙЧАС.
-    /// Платный тариф действует месяц с даты последней оплаты именно этого тарифа;
-    /// после этого пользователь автоматически считается на бесплатном тарифе (id = 1).
-    /// Лимиты соответствуют слайду «Бизнес-модель: Тарифы».
-    /// </summary>
+  
     public static class TariffService
     {
         public static TariffStatus Unlimited(string role) => new TariffStatus
@@ -109,7 +101,6 @@ namespace ProfNastavnik.Security
 
             if (role == "student")
             {
-                // «Старт»: до 5 откликов в месяц. «Профи»: безлимит + чат-бот.
                 st.MaxResponsesPerMonth = effective == 2 ? -1 : 5;
                 st.Chatbot = effective == 2;
                 st.ResponsesUsed = ctx.Responses.Count(x => x.IdUser == id && x.DateResponse >= monthStart);
@@ -118,19 +109,19 @@ namespace ProfNastavnik.Security
             {
                 switch (effective)
                 {
-                    case 3:  // «Корпоративный»
+                    case 3:  
                         st.MaxVacancies = -1; st.MaxResponsesPerMonth = -1;
                         st.Chatbot = st.PriorityResponses = st.TopStudents = st.SearchStudents = st.InviteStudents = true;
                         break;
-                    case 2:  // «Бизнес»
+                    case 2: 
                         st.MaxVacancies = 5; st.MaxResponsesPerMonth = 20;
                         st.Chatbot = st.PriorityResponses = true;
                         break;
-                    default: // «Базовый»
+                    default:
                         st.MaxVacancies = 1; st.MaxResponsesPerMonth = 5;
                         break;
                 }
-                st.VacanciesUsed = ctx.Vacancies.Count(x => x.IdCompany == id && !(x.StatusVacancy ?? "").Contains("рхив"));
+                st.VacanciesUsed = ctx.Vacancies.Count(x => x.IdCompany == id && (x.StatusVacancy == "Активна" || x.StatusVacancy == "На модерации"));
                 st.ResponsesUsed = ctx.Responses.Count(x => x.IdCompany == id && x.DateResponse >= monthStart);
             }
             return st;

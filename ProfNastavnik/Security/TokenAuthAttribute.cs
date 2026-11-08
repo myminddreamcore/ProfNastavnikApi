@@ -7,14 +7,12 @@ using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace ProfNastavnik.Security
 {
-    /// <summary>Разрешает метод без токена (вход, регистрация, сброс пароля, справочники).</summary>
+    [AttributeUsage(AttributeTargets.Method)]
+    public class SkipVersionCheckAttribute : Attribute { }
+
     [AttributeUsage(AttributeTargets.Method)]
     public class PublicEndpointAttribute : Attribute { }
 
-    /// <summary>
-    /// Требует заголовок "Authorization: Bearer {token}". Ставится на контроллер.
-    /// Roles = "admin" (или "student,company") ограничивает доступ по роли.
-    /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
     public class TokenAuthAttribute : Attribute, IAsyncActionFilter
     {
@@ -22,6 +20,17 @@ namespace ProfNastavnik.Security
 
         public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
         {
+            bool skipVersion = context.ActionDescriptor.EndpointMetadata.OfType<SkipVersionCheckAttribute>().Any();
+            if (!skipVersion && AppRuntime.MinVersionCode > 0)
+            {
+                int ver = int.TryParse(context.HttpContext.Request.Headers["X-App-Version"].ToString(), out var vv) ? vv : 0;
+                if (ver < AppRuntime.MinVersionCode)
+                {
+                    context.Result = new ObjectResult("Требуется обновление приложения") { StatusCode = 426 };
+                    return;
+                }
+            }
+
             bool isPublic = context.ActionDescriptor.EndpointMetadata.OfType<PublicEndpointAttribute>().Any();
             if (isPublic)
             {
@@ -48,17 +57,28 @@ namespace ProfNastavnik.Security
                 }
             }
 
+            if (!AccountGuard.IsActive(claims))
+            {
+                context.Result = new ObjectResult("Аккаунт заблокирован или удалён") { StatusCode = 401 };
+                return;
+            }
+
             context.HttpContext.Items["auth"] = claims;
             await next();
         }
     }
 
-    /// <summary>Доступ к данным текущего пользователя внутри контроллера.</summary>
     public static class AuthContext
     {
         public static AuthClaims? Get(HttpContext ctx) => ctx.Items["auth"] as AuthClaims;
 
-        /// <summary>true, если запрос делает сам владелец данных (role + id совпали) или администратор.</summary>
+        public static bool IsParticipant(HttpContext ctx, int studentId, int companyId)
+        {
+            var a = Get(ctx);
+            if (a == null) return false;
+            return a.Role == "admin" || (a.Role == "student" && a.UserId == studentId) || (a.Role == "company" && a.UserId == companyId);
+        }
+
         public static bool IsSelfOrAdmin(HttpContext ctx, string role, int id)
         {
             var a = Get(ctx);
@@ -68,7 +88,6 @@ namespace ProfNastavnik.Security
         }
     }
 
-    /// <summary>Единое логирование ошибок для try/catch в контроллерах.</summary>
     public static class ApiErrors
     {
         public static void Log(Exception ex, string where)
@@ -78,10 +97,6 @@ namespace ProfNastavnik.Security
         }
     }
 
-    /// <summary>
-    /// Подтверждённые кодом email (для сброса пароля). Без этого любой мог бы сменить чужой пароль,
-    /// просто отправив запрос ResetPassword.
-    /// </summary>
     public static class EmailVerifiedStore
     {
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> Items =

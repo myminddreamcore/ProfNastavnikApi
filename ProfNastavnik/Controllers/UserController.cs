@@ -20,6 +20,7 @@ using System.Net.Mail;
 namespace ProfNastavnik.Controllers
 {
     [Route("api/[controller]")]
+    [Route("api/v1/[controller]")]
     [ApiController]
     [TokenAuth]
     public class UserController : ControllerBase
@@ -35,10 +36,9 @@ namespace ProfNastavnik.Controllers
             {
             if (request == null || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.NewPassword))
                 return BadRequest("Некорректный запрос");
-            // Раньше код проверялся только в приложении, и любой мог сменить чужой пароль прямым запросом
             if (!EmailVerifiedStore.Consume(request.Email))
                 return StatusCode(403, "Сначала подтвердите email кодом из письма");
-            string hashedPassword = Sha256Hash(request.NewPassword);
+            string hashedPassword = PasswordHasher.Hash(request.NewPassword);
 
             using (var context = new ProfnastavnikContext())
             {
@@ -69,14 +69,24 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
-            string hashedPassword = Sha256Hash(s.PasswordUser);
+            if (s == null || string.IsNullOrWhiteSpace(s.EmailUser) || string.IsNullOrEmpty(s.PasswordUser))
+                return BadRequest("Введите email и пароль");
+            if (LoginThrottle.IsLocked(s.EmailUser))
+                return StatusCode(429, "Слишком много неудачных попыток входа. Повторите через 10 минут");
 
             using (var context = new ProfnastavnikContext())
             {
-                User user = context.Users.FirstOrDefault(x => x.EmailUser == s.EmailUser && x.PasswordUser == hashedPassword);
-                if (user == null)
+                User user = context.Users.FirstOrDefault(x => x.EmailUser == s.EmailUser);
+                if (user == null || !PasswordHasher.Verify(s.PasswordUser, user.PasswordUser ?? ""))
                 {
+                    LoginThrottle.Fail(s.EmailUser);
                     return NotFound("пользователь не найден");
+                }
+                LoginThrottle.Reset(s.EmailUser);
+                if (PasswordHasher.NeedsRehash(user.PasswordUser ?? ""))
+                {
+                    user.PasswordUser = PasswordHasher.Hash(s.PasswordUser);
+                    context.SaveChanges();
                 }
                 if (user.RoleUser == "Администратор")
                 {
@@ -115,13 +125,11 @@ namespace ProfNastavnik.Controllers
             }
         }
 
-        // Выдача токена при успешном входе: токен уходит в заголовке X-Auth-Token,
-        // тело ответа остаётся прежним (User), поэтому старый клиент не ломается.
         private ActionResult IssueToken(User user, string role, int id)
         {
             string token = TokenService.Issue(id, user.EmailUser ?? "", role);
             HttpContext.Response.Headers["X-Auth-Token"] = token;
-            user.PasswordUser = "";   // хэш пароля клиенту отдавать не нужно
+            user.PasswordUser = "";   
             return Ok(user);
         }
 
@@ -178,8 +186,6 @@ namespace ProfNastavnik.Controllers
             {
                 UserPrice user = context.UserPrices.FirstOrDefault(x => x.IdUser == id);
                 if (user == null) return NotFound("не найден прайс");
-                // Возвращаем ДЕЙСТВУЮЩИЙ тариф: если оплата старше месяца, это бесплатный «Старт».
-                // Поэтому все экраны приложения, которые спрашивают тариф, автоматически учитывают срок оплаты.
                 var tariff = TariffService.Compute(context, "student", id);
                 return Ok(new UserPrice { Id = user.Id, IdUser = user.IdUser, IdPrices = tariff.TariffId });
             }
@@ -195,6 +201,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "student", id))
+                    return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                 DateOnly date = new DateOnly(DateTime.Today.Year, DateTime.Today.Month, 1);
@@ -213,6 +221,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "student", id))
+                    return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                 var chats = context.Chats.Include(x=>x.IdVacancyNavigation).Include(x=>x.IdDirectorNavigation).Include(x=>x.IdUserNavigation)
@@ -246,6 +256,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsParticipant(HttpContext, id_user, id_company))
+                    return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                 if (id_user != 0 && id_vacancy != 0)
@@ -285,6 +297,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "company", id_company))
+                    return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                 
@@ -311,6 +325,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "student", id_user))
+                    return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                
@@ -337,8 +353,47 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+            var auth = AuthContext.Get(HttpContext);
+            if (auth == null) return StatusCode(401, "Требуется авторизация");
+            if (t == null || string.IsNullOrWhiteSpace(t.TextChat)) return BadRequest("Пустое сообщение");
+            if (t.TextChat.Length > 2000) return BadRequest("Сообщение слишком длинное (максимум 2000 символов)");
+
             using (var context = new ProfnastavnikContext())
             {
+                switch (t.SenderChat)
+                {
+                    case "Админ":
+                        if (auth.Role != "admin") return StatusCode(403, "Нет доступа");
+                        break;
+                    case "Стажер":
+                        if (auth.Role != "admin" && (auth.Role != "student" || t.IdUser != auth.UserId))
+                            return StatusCode(403, "Нет доступа");
+                        break;
+                    case "Работодатель":
+                        if (auth.Role != "admin")
+                        {
+                            if (auth.Role != "company" || t.IdDirector != auth.UserId)
+                                return StatusCode(403, "Нет доступа");
+
+                            bool toAdmin = !string.IsNullOrWhiteSpace(t.EmailAdmin);
+                            if (!toAdmin)
+                            {
+                                if (t.IdUser == null) return BadRequest("Не указан получатель");
+                                bool dialogExists = context.Chats.Any(x => x.IdDirector == auth.UserId && x.IdUser == t.IdUser
+                                                                           && (x.EmailAdmin == null || x.EmailAdmin == ""));
+                                if (!dialogExists)
+                                {
+                                    var tariff = TariffService.Compute(context, "company", auth.UserId);
+                                    if (!tariff.InviteStudents)
+                                        return StatusCode(403, tariff.Locked("Приглашение стажёров (писать первыми)"));
+                                }
+                            }
+                        }
+                        break;
+                    default:
+                        return BadRequest("Неизвестный отправитель");
+                }
+
                 t.SendAtChat = DateTime.Now;
                 t.IdChat = context.Chats.Any() ? context.Chats.Max(x => x.IdChat) + 1 : 1;
                 context.Chats.Add(t);
@@ -357,6 +412,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "student", id))
+                    return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                 List<Intership> list = context.Interships.Where(x => x.IdUser == id && x.StatusIntership == "Закончена").Include(x => x.IdVacancyNavigation).Include(x => x.IdVacancyNavigation.CurrencyVacancyNavigation).ToList();
@@ -385,6 +442,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "student", id))
+                    return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                 List<Favourity> list = context.Favourities.Where(x => x.IdUser == id).Include(x => x.IdVacancyNavigation).Include(x => x.IdVacancyNavigation.CurrencyVacancyNavigation).ToList();
@@ -506,7 +565,11 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
-                var code = new Random().Next(1000, 9999).ToString();
+                if (request == null || string.IsNullOrWhiteSpace(request.Email))
+                    return BadRequest(new { message = "Не указан email" });
+                if (!SendThrottle.TryAcquire(request.Email))
+                    return StatusCode(429, new { message = "Код уже отправлен. Повторите через минуту" });
+                var code = System.Security.Cryptography.RandomNumberGenerator.GetInt32(1000, 10000).ToString();
                 VerificationCodeStorage.SaveCode(request.Email, code);
 
                 string fromEmail = "official.workship@mail.ru";
@@ -524,9 +587,9 @@ namespace ProfNastavnik.Controllers
 
                     using (var mail = new MailMessage())
                     {
-                        mail.From = new MailAddress(fromEmail, "ПРОФНаставник");
+                        mail.From = new MailAddress(fromEmail, "Воркшип");
                         mail.To.Add(request.Email);
-                        mail.Subject = "Код подтверждения ПРОФНаставник";
+                        mail.Subject = "Код подтверждения Воркшип";
                         mail.Body = $@"
                     <html>
                         <body>
@@ -559,15 +622,23 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+            if (request == null || string.IsNullOrWhiteSpace(request.Email))
+                return BadRequest(new { message = "Не указан email" });
+            string throttleKey = "code:" + request.Email;
+            if (LoginThrottle.IsLocked(throttleKey))
+                return StatusCode(429, new { message = "Слишком много неверных попыток. Запросите новый код через 10 минут" });
+
             bool isValid = VerificationCodeStorage.VerifyCode(request.Email, request.Code);
 
             if (isValid)
             {
+                LoginThrottle.Reset(throttleKey);
                 VerificationCodeStorage.RemoveCode(request.Email);
                 EmailVerifiedStore.Mark(request.Email);
                 return Ok(new { message = "Код успешно подтвержден" });
             }
 
+            LoginThrottle.Fail(throttleKey);
             return BadRequest(new { message = "Неверный или истекший код" });
             }
             catch (Exception __ex)
@@ -582,6 +653,20 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+            if (user == null || string.IsNullOrWhiteSpace(user.EmailUser) || !user.EmailUser.Contains('@'))
+                return BadRequest("Некорректный email");
+            if (string.IsNullOrEmpty(user.PasswordUser) || user.PasswordUser.Length < 6)
+                return BadRequest("Пароль должен быть не короче 6 символов");
+            // Согласие на обработку ПД и принятие документов: отдельные отметки в приложении (152-ФЗ, ст. 9)
+            string consentVersion = Request.Headers["X-Consent-Version"].ToString();
+            bool adultConfirmed = Request.Headers["X-Adult-Confirmed"].ToString() == "true";
+            if (string.IsNullOrWhiteSpace(consentVersion) || !adultConfirmed)
+                return BadRequest("Необходимо принять условия и дать согласие на обработку персональных данных");
+            // Публично можно зарегистрироваться только как стажёр или работодатель.
+            // Раньше роль бралась из запроса, и любой мог создать аккаунт «Администратор».
+            if (user.RoleUser != "Стажер" && user.RoleUser != "Работодатель")
+                return BadRequest("Недопустимая роль");
+
             using (var context = new ProfnastavnikContext())
             {
                 var existingUser = context.Users.FirstOrDefault(x => x.EmailUser == user.EmailUser);
@@ -590,13 +675,14 @@ namespace ProfNastavnik.Controllers
                     return BadRequest("Пользователь с таким email уже существует");
                 }
 
-                user.PasswordUser = Sha256Hash(user.PasswordUser);
+                user.PasswordUser = PasswordHasher.Hash(user.PasswordUser);
 
                 context.Users.Add(user);
                 
                 
                 context.SaveChanges();
 
+                ConsentStore.Record(context, user.EmailUser, consentVersion, HttpContext.Connection.RemoteIpAddress?.ToString(), adultConfirmed);
                 user.PasswordUser = "";
                 return Ok(user);
             }
@@ -633,8 +719,14 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+            if (student == null || string.IsNullOrWhiteSpace(student.EmailStudent))
+                return BadRequest("Не указан email");
             using (var context = new ProfnastavnikContext())
             {
+                if (!context.Users.Any(u => u.EmailUser == student.EmailStudent && u.RoleUser == "Стажер"))
+                    return BadRequest("Сначала зарегистрируйтесь");
+                if (context.Students.Any(x => x.EmailStudent == student.EmailStudent))
+                    return BadRequest("Профиль студента уже создан");
                 student.IdStudent = context.Students.Any() ? context.Students.Max(x => x.IdStudent) + 1 : 1;
                 student.StatusStudent = "На модерации";
                 student.DateCreatedStudent = DateOnly.FromDateTime(DateTime.Now);
@@ -746,7 +838,7 @@ namespace ProfNastavnik.Controllers
                 context.SaveChanges();
                 foreach (var item in (alus.StudentFiles ?? new List<string>()))
                 {
-                    maxId3++;   // БЫЛО: у всех файлов был один и тот же ключ
+                    maxId3++; 
 
                     StudentFile skill = new StudentFile()
                     {
@@ -776,6 +868,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "student", id_user))
+                    return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                 Favourity f = new Favourity()
@@ -800,6 +894,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "student", id_user))
+                    return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                 Favourity f = context.Favourities.FirstOrDefault(x => x.IdUser==id_user && x.IdVacancy==id_vacancy);
@@ -819,6 +915,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "student", id_user))
+                    return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                 Favourity f = context.Favourities.FirstOrDefault(x => x.IdUser == id_user && x.IdVacancy == id_vacancy);
@@ -886,6 +984,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "student", id))
+                    return StatusCode(403, "Нет доступа");
             using (var context = new ProfnastavnikContext())
             {
                 List<Chat> interships = context.Chats.Where(x => x.IdUser == id && (x.SenderChat == "Работодатель" || x.SenderChat=="Админ" ) && x.StatusChat!="Прочитано").ToList();

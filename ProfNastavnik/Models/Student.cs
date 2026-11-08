@@ -34,7 +34,7 @@ public partial class Student
     [JsonIgnore]
     public virtual ICollection<Chat> Chats { get; set; } = new List<Chat>();
     [JsonIgnore]
-    public virtual User? EmailStudentNavigation { get; set; } = null!;
+    public virtual User EmailStudentNavigation { get; set; } = null!;
     [JsonIgnore]
     public virtual ICollection<Favourity> Favourities { get; set; } = new List<Favourity>();
     [JsonIgnore]
@@ -43,6 +43,8 @@ public partial class Student
     public virtual ICollection<FeedbacksUser> FeedbacksUsers { get; set; } = new List<FeedbacksUser>();
     [JsonIgnore]
     public virtual ICollection<Intership> Interships { get; set; } = new List<Intership>();
+    [JsonIgnore]
+    public virtual ICollection<RequestsUser> RequestsUsers { get; set; } = new List<RequestsUser>();
     [JsonIgnore]
     public virtual ICollection<Response> Responses { get; set; } = new List<Response>();
     [JsonIgnore]
@@ -57,6 +59,4 @@ public partial class Student
     public virtual ICollection<UserProfession> UserProfessions { get; set; } = new List<UserProfession>();
     [JsonIgnore]
     public virtual ICollection<UserSkill> UserSkills { get; set; } = new List<UserSkill>();
-    [JsonIgnore]
-    public virtual ICollection<RequestsUser> RequestsUsers { get; set; } = new List<RequestsUser>();
 }

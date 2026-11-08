@@ -50,9 +50,9 @@ public partial class Director
     [JsonIgnore]
     public virtual ICollection<Intership> Interships { get; set; } = new List<Intership>();
     [JsonIgnore]
+    public virtual ICollection<RequestsCompany> RequestsCompanies { get; set; } = new List<RequestsCompany>();
+    [JsonIgnore]
     public virtual ICollection<Response> Responses { get; set; } = new List<Response>();
     [JsonIgnore]
     public virtual ICollection<Vacancy> Vacancies { get; set; } = new List<Vacancy>();
-    [JsonIgnore]
-    public virtual ICollection<RequestsCompany> RequestsCompanies { get; set; } = new List<RequestsCompany>();
 }

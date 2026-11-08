@@ -9,6 +9,7 @@ using ProfNastavnik.Models;
 namespace ProfNastavnik.Controllers
 {
     [Route("api/[controller]")]
+    [Route("api/v1/[controller]")]
     [ApiController]
     [TokenAuth]
     public class RequestController : ControllerBase
@@ -18,6 +19,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "student", userId))
+                    return StatusCode(403, "Нет доступа");
                 using var context = new ProfnastavnikContext();
 
                 var requests = await context.RequestsUsers
@@ -52,6 +55,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "company", companyId))
+                    return StatusCode(403, "Нет доступа");
                 using var context = new ProfnastavnikContext();
 
                 var requests = await context.RequestsCompanies
@@ -85,6 +90,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "student", request.IdStudent))
+                    return StatusCode(403, "Нет доступа");
                 using var context = new ProfnastavnikContext();
                 var newRequest = new RequestsUser
                 {
@@ -118,6 +125,8 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+                if (!AuthContext.IsSelfOrAdmin(HttpContext, "company", request.IdCompany))
+                    return StatusCode(403, "Нет доступа");
                 using var context = new ProfnastavnikContext();
 
 

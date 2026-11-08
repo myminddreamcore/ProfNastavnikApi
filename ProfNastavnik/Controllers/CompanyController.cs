@@ -10,6 +10,7 @@ using ProfNastavnik.Models;
 namespace ProfNastavnik.Controllers
 {
     [Route("api/[controller]")]
+    [Route("api/v1/[controller]")]
     [ApiController]
     [TokenAuth]
     public class CompanyController : ControllerBase
@@ -410,7 +411,6 @@ namespace ProfNastavnik.Controllers
                     return NotFound("цены не найдены");
                 }
 
-                // Возвращаем ДЕЙСТВУЮЩИЙ тариф: если оплата старше месяца, это бесплатный «Базовый»
                 var tariff = TariffService.Compute(context, "company", id);
                 return Ok(new CompanyPrice { Id = pr.Id, IdCompany = pr.IdCompany, IdPrice = tariff.TariffId });
             }
@@ -553,8 +553,14 @@ namespace ProfNastavnik.Controllers
         {
             try
             {
+            if (director == null || string.IsNullOrWhiteSpace(director.EmailDirector))
+                return BadRequest("Не указан email");
             using (var context = new ProfnastavnikContext())
             {
+                if (!context.Users.Any(u => u.EmailUser == director.EmailDirector && u.RoleUser == "Работодатель"))
+                    return BadRequest("Сначала зарегистрируйтесь");
+                if (context.Directors.Any(x => x.EmailDirector == director.EmailDirector))
+                    return BadRequest("Профиль компании уже создан");
                 director.IdDirector = context.Directors.Any() ? context.Directors.Max(x => x.IdDirector) + 1 : 1;
                 director.StatusDirector = "На модерации";
                 director.DateCreatedDirector = DateOnly.FromDateTime(DateTime.Now);
@@ -626,7 +632,6 @@ namespace ProfNastavnik.Controllers
                 if (auth == null) return StatusCode(401, "Требуется авторизация");
                 using (var context = new ProfnastavnikContext())
                 {
-                    // «Поиск стажёров» входит только в корпоративный тариф
                     if (auth.Role != "admin")
                     {
                         if (auth.Role != "company") return StatusCode(403, "Нет доступа");
@@ -639,8 +644,6 @@ namespace ProfNastavnik.Controllers
                         .Include(x => x.UniversityStudentNavigation)
                         .Where(x => x.StatusStudent == "Активен");
 
-                    // ФИО: каждое слово запроса должно встретиться в имени, фамилии или отчестве (без учёта регистра).
-                    // Раньше запрос «Иванов Иван» целиком не находил никого, и регистр учитывался.
                     if (!string.IsNullOrWhiteSpace(filters.FullName))
                     {
                         foreach (var word in filters.FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries))
@@ -666,7 +669,6 @@ namespace ProfNastavnik.Controllers
                     var students = query.ToList();
                     var sids = students.Select(x => x.IdStudent).ToList();
 
-                    // Навыки и профессии всех найденных студентов одним запросом (раньше по 2 запроса на студента)
                     var skillMap = context.UserSkills.Include(x => x.IdSkillNavigation)
                         .Where(x => x.IdUser != null && sids.Contains(x.IdUser.Value)).ToList()
                         .GroupBy(x => x.IdUser.Value)
@@ -684,11 +686,9 @@ namespace ProfNastavnik.Controllers
                         skills = skills ?? new List<string>();
                         professions = professions ?? new List<string>();
 
-                        // нужны ВСЕ выбранные навыки, регистр не важен
                         if (filters.Skills != null && filters.Skills.Any() &&
                             !filters.Skills.All(sk => skills.Contains(sk, StringComparer.OrdinalIgnoreCase))) continue;
 
-                        // достаточно ОДНОЙ из выбранных профессий
                         if (filters.Professions != null && filters.Professions.Any() &&
                             !filters.Professions.Any(p => professions.Contains(p, StringComparer.OrdinalIgnoreCase))) continue;
 
@@ -800,7 +800,7 @@ namespace ProfNastavnik.Controllers
                         ProfessionMatchCount = professionMatchCount,
                         ProfessionMatchPercent = Math.Round(professionMatchPercent, 1),
                         CompletedInternships = completedInternships,
-                        StudentRating = Math.Round(studentRating, 1), // Добавили рейтинг
+                        StudentRating = Math.Round(studentRating, 1),
                         TotalScore = Math.Round(totalScore, 1),
                         HasPortfolio = !string.IsNullOrEmpty(response.PortfolioResponse)
                     });

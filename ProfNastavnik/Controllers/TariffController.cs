@@ -6,11 +6,12 @@ using ProfNastavnik.Security;
 namespace ProfNastavnik.Controllers
 {
     [Route("api/[controller]")]
+    [Route("api/v1/[controller]")]
     [ApiController]
     [TokenAuth]
     public class TariffController : ControllerBase
     {
-        // GET api/Tariff/Me: действующий тариф, срок оплаты, лимиты и расход (по токену)
+        // GET api/Tariff/Me: 
         [HttpGet("Me")]
         public ActionResult Me()
         {

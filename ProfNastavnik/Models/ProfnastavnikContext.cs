@@ -65,6 +65,8 @@ public partial class ProfnastavnikContext : DbContext
 
     public virtual DbSet<User> Users { get; set; }
 
+    public virtual DbSet<UserConsent> UserConsents { get; set; }
+
     public virtual DbSet<UserPay> UserPays { get; set; }
 
     public virtual DbSet<UserPrice> UserPrices { get; set; }
@@ -690,6 +692,22 @@ public partial class ProfnastavnikContext : DbContext
             entity.Property(e => e.RoleUser)
                 .HasMaxLength(15)
                 .HasColumnName("role_user");
+        });
+
+        modelBuilder.Entity<UserConsent>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("user_consents_pkey");
+
+            entity.ToTable("user_consents", "profnastavnik");
+
+            entity.HasIndex(e => e.Email, "ix_user_consents_email");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.AcceptedAt).HasColumnName("accepted_at");
+            entity.Property(e => e.ConsentVersion).HasColumnName("consent_version");
+            entity.Property(e => e.Email).HasColumnName("email");
+            entity.Property(e => e.Ip).HasColumnName("ip");
+            entity.Property(e => e.IsAdult).HasColumnName("is_adult");
         });
 
         modelBuilder.Entity<UserPay>(entity =>

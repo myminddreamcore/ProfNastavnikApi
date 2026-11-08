@@ -22,6 +22,7 @@ using System.Net.Mail;
 namespace ProfNastavnik.Controllers
 {
     [Route("api/[controller]")]
+    [Route("api/v1/[controller]")]
     [ApiController]
     [TokenAuth]
     public class AdminController : ControllerBase
@@ -861,21 +862,21 @@ namespace ProfNastavnik.Controllers
                     <h2>Здравствуйте, {user.NameStudent}!</h2>
                     <p>Ваш аккаунт был активирован.</p>
                     <p>Теперь вы можете полноценно пользоваться всеми функциями платформы.</p>
-                    <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                    <p>С уважением,<br>Команда Воркшип</p>",
                         "Удален" => $@"
                     <h2>Здравствуйте, {user.NameStudent}!</h2>
                     <p>Ваш аккаунт был заблокирован за нарушение правил сообщества.</p>
                     <p>Если вы считаете это ошибкой, свяжитесь с поддержкой: official.workship@mail.ru</p>
-                    <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                    <p>С уважением,<br>Команда Воркшип</p>",
                         "На модерации" => $@"
                     <h2>Здравствуйте, {user.NameStudent}!</h2>
                     <p>Ваш аккаунт отправлен на модерацию.</p>
                     <p>Мы проверим ваши данные и свяжемся с вами в ближайшее время.</p>
-                    <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                    <p>С уважением,<br>Команда Воркшип</p>",
                         _ => $@"
                     <h2>Здравствуйте, {user.NameStudent}!</h2>
                     <p>Статус вашего аккаунта изменен на: <strong>{status}</strong></p>
-                    <p>С уважением,<br>Команда ПРОФНаставник</p>"
+                    <p>С уважением,<br>Команда Воркшип</p>"
                     };
 
                     SendEmail(user.EmailStudent, subject, body);
@@ -925,21 +926,21 @@ namespace ProfNastavnik.Controllers
                     <h2>Здравствуйте!</h2>
                     <p>Ваша компания <strong>«{company.NameCompanyDirector}»</strong> была активирована.</p>
                     <p>Теперь вы можете публиковать вакансии и находить лучших стажеров.</p>
-                    <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                    <p>С уважением,<br>Команда Воркшип</p>",
                         "Удален" => $@"
                     <h2>Здравствуйте!</h2>
                     <p>Ваша компания <strong>«{company.NameCompanyDirector}»</strong> была заблокирована за нарушение правил сообщества.</p>
                     <p>Если вы считаете это ошибкой, свяжитесь с поддержкой: official.workship@mail.ru</p>
-                    <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                    <p>С уважением,<br>Команда Воркшип</p>",
                         "На модерации" => $@"
                     <h2>Здравствуйте!</h2>
                     <p>Ваша компания <strong>«{company.NameCompanyDirector}»</strong> отправлена на модерацию.</p>
                     <p>Мы проверим ваши данные и свяжемся с вами в ближайшее время.</p>
-                    <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                    <p>С уважением,<br>Команда Воркшип</p>",
                         _ => $@"
                     <h2>Здравствуйте!</h2>
                     <p>Статус вашей компании <strong>«{company.NameCompanyDirector}»</strong> изменен на: <strong>{status}</strong></p>
-                    <p>С уважением,<br>Команда ПРОФНаставник</p>"
+                    <p>С уважением,<br>Команда Воркшип</p>"
                     };
 
                     SendEmail(company.EmailDirector, subject, body);
@@ -992,21 +993,21 @@ namespace ProfNastavnik.Controllers
                         <h2>Здравствуйте!</h2>
                         <p>Ваша вакансия <strong>«{vacancy.NameVacancy}»</strong> опубликована и доступна для просмотра.</p>
                         <p>Желаем вам найти лучшего кандидата!</p>
-                        <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                        <p>С уважением,<br>Команда Воркшип</p>",
                             "Архив" => $@"
                         <h2>Здравствуйте!</h2>
                         <p>Ваша вакансия <strong>«{vacancy.NameVacancy}»</strong> была отправлена в архив.</p>
                         <p>Вы можете восстановить её в любой момент.</p>
-                        <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                        <p>С уважением,<br>Команда Воркшип</p>",
                             "На модерации" => $@"
                         <h2>Здравствуйте!</h2>
                         <p>Ваша вакансия <strong>«{vacancy.NameVacancy}»</strong> отправлена на модерацию.</p>
                         <p>Мы проверим её и свяжемся с вами в ближайшее время.</p>
-                        <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                        <p>С уважением,<br>Команда Воркшип</p>",
                             _ => $@"
                         <h2>Здравствуйте!</h2>
                         <p>Статус вашей вакансии <strong>«{vacancy.NameVacancy}»</strong> изменен на: <strong>{status}</strong></p>
-                        <p>С уважением,<br>Команда ПРОФНаставник</p>"
+                        <p>С уважением,<br>Команда Воркшип</p>"
                         };
 
                         SendEmail(vacancy.IdCompanyNavigation.EmailDirector, subject, body);
@@ -1060,21 +1061,21 @@ namespace ProfNastavnik.Controllers
                         <h2>Здравствуйте, {feedback.IdUserNavigation.NameStudent}!</h2>
                         <p>Ваш отзыв о компании был одобрен и опубликован.</p>
                         <p>Спасибо, что делитесь своим опытом!</p>
-                        <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                        <p>С уважением,<br>Команда Воркшип</p>",
                             "Удалено" => $@"
                         <h2>Здравствуйте, {feedback.IdUserNavigation.NameStudent}!</h2>
                         <p>Ваш отзыв был удален за нарушение правил сообщества.</p>
                         <p>Если вы считаете это ошибкой, свяжитесь с поддержкой: official.workship@mail.ru</p>
-                        <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                        <p>С уважением,<br>Команда Воркшип</p>",
                             "На модерации" => $@"
                         <h2>Здравствуйте, {feedback.IdUserNavigation.NameStudent}!</h2>
                         <p>Ваш отзыв отправлен на модерацию.</p>
                         <p>Мы проверим его и свяжемся с вами в ближайшее время.</p>
-                        <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                        <p>С уважением,<br>Команда Воркшип</p>",
                             _ => $@"
                         <h2>Здравствуйте!</h2>
                         <p>Статус вашего отзыва изменен на: <strong>{status}</strong></p>
-                        <p>С уважением,<br>Команда ПРОФНаставник</p>"
+                        <p>С уважением,<br>Команда Воркшип</p>"
                         };
 
                         SendEmail(feedback.IdUserNavigation.EmailStudent, subject, body);
@@ -1128,21 +1129,21 @@ namespace ProfNastavnik.Controllers
                         <h2>Здравствуйте!</h2>
                         <p>Ваш отзыв о студенте был одобрен и опубликован.</p>
                         <p>Спасибо, что делитесь своим опытом!</p>
-                        <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                        <p>С уважением,<br>Команда Воркшип</p>",
                             "Удален" => $@"
                         <h2>Здравствуйте!</h2>
                         <p>Ваш отзыв был удален за нарушение правил сообщества.</p>
                         <p>Если вы считаете это ошибкой, свяжитесь с поддержкой: official.workship@mail.ru</p>
-                        <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                        <p>С уважением,<br>Команда Воркшип</p>",
                             "На модерации" => $@"
                         <h2>Здравствуйте!</h2>
                         <p>Ваш отзыв отправлен на модерацию.</p>
                         <p>Мы проверим его и свяжемся с вами в ближайшее время.</p>
-                        <p>С уважением,<br>Команда ПРОФНаставник</p>",
+                        <p>С уважением,<br>Команда Воркшип</p>",
                             _ => $@"
                         <h2>Здравствуйте!</h2>
                         <p>Статус вашего отзыва изменен на: <strong>{status}</strong></p>
-                        <p>С уважением,<br>Команда ПРОФНаставник</p>"
+                        <p>С уважением,<br>Команда Воркшип</p>"
                         };
 
                         SendEmail(feedback.IdCompanyNavigation.EmailDirector, subject, body);
@@ -1180,7 +1181,7 @@ namespace ProfNastavnik.Controllers
 
                     using (var mail = new MailMessage())
                     {
-                        mail.From = new MailAddress(fromEmail, "ПРОФНаставник");
+                        mail.From = new MailAddress(fromEmail, "Воркшип");
                         mail.To.Add(toEmail);
                         mail.Subject = subject;
                         mail.Body = body;
@@ -1264,7 +1265,6 @@ namespace ProfNastavnik.Controllers
                 using var context = new ProfnastavnikContext();
                 var result = new ModerationItems();
 
-                // Пользователи на модерации
                 result.Users = await context.Students
                     .Where(s => s.StatusStudent == "На модерации")
                     .Select(s => new ModerationUser
@@ -1281,7 +1281,6 @@ namespace ProfNastavnik.Controllers
                     })
                     .ToListAsync();
 
-                // Компании на модерации
                 result.Companies = await context.Directors
                     .Where(d => d.StatusDirector == "На модерации")
                     .Select(d => new ModerationCompany
@@ -1294,7 +1293,6 @@ namespace ProfNastavnik.Controllers
                     })
                     .ToListAsync();
 
-                // Вакансии на модерации
                 result.Vacancies = await context.Vacancies
                     .Include(v => v.IdCompanyNavigation)
                     .Where(v => v.StatusVacancy == "На модерации")
@@ -1307,8 +1305,6 @@ namespace ProfNastavnik.Controllers
                         Status = v.StatusVacancy
                     })
                     .ToListAsync();
-
-                // Отзывы о студентах на модерации
                 result.FeedbacksToUsers = await context.FeedbacksCompanies
                 .Include(f => f.IdCompanyNavigation)
                 .Include(f => f.IdUserNavigation)
@@ -1325,7 +1321,6 @@ namespace ProfNastavnik.Controllers
                 })
                 .ToListAsync();
 
-                // Отзывы о компаниях на модерации
                 result.FeedbacksToCompanies = await context.FeedbacksUsers
                     .Include(f => f.IdCompanyNavigation)
                     .Include(f => f.IdUserNavigation)

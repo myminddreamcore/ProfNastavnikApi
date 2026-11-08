@@ -15,12 +15,9 @@ using ProfNastavnik.Models;
 
 namespace ProfNastavnik.Controllers
 {
-    /// <summary>
-    /// ИИ-помощник: для студентов работает как рекрутер/карьерный наставник, для компаний помогает с вакансиями и отбором,
-    /// для всех подсказывает по навигации. Использует любой OpenAI-совместимый API (ключ в appsettings.json).
-    /// Если ключа нет или провайдер недоступен, отвечает локальным анализатором профиля, так что бот работает всегда.
-    /// </summary>
+   
     [Route("api/[controller]")]
+    [Route("api/v1/[controller]")]
     [ApiController]
     [TokenAuth]
     public class AssistantController : ControllerBase
@@ -47,7 +44,6 @@ namespace ProfNastavnik.Controllers
             public List<AssistantMessageDto>? History { get; set; }
         }
 
-        // ===== Контекст пользователя =====
         private class StudentCtx
         {
             public bool Found;
@@ -113,7 +109,6 @@ namespace ProfNastavnik.Controllers
                 c.ResponsesCount = db.Responses.Count(x => x.IdUser == id);
                 c.InternshipsCount = db.Interships.Count(x => x.IdUser == id);
 
-                // Какие навыки чаще всего требуют вакансии, а у студента их нет
                 var vs = db.VacancySkills.Include(x => x.IdSkillNavigation).Include(x => x.IdVacancyNavigation)
                     .ToList()
                     .Where(x => x.IdSkillNavigation?.NameSkill != null && x.IdVacancyNavigation != null
@@ -126,7 +121,6 @@ namespace ProfNastavnik.Controllers
                     .OrderByDescending(g => g.Count())
                     .Take(8).Select(g => g.Key + " (в " + g.Count() + " вакансиях)").ToList();
 
-                // Чего не хватает именно для вакансий, на которые студент уже откликался
                 var myVacIds = db.Responses.Where(x => x.IdUser == id && x.IdVacancy != null)
                     .Select(x => x.IdVacancy!.Value).ToList().ToHashSet();
                 c.MissingForMyResponses = vs
@@ -137,7 +131,6 @@ namespace ProfNastavnik.Controllers
                     .Take(6).Select(g => g.Key).ToList();
             }
 
-            // Заполненность профиля (0..100)
             int score = 0;
             if (!string.IsNullOrWhiteSpace(c.Name)) score += 5; else c.ProfileTodo.Add("указать ФИО");
             if (c.University != null) score += 10; else c.ProfileTodo.Add("выбрать университет");
@@ -195,7 +188,6 @@ namespace ProfNastavnik.Controllers
             return c;
         }
 
-        // ===== База знаний о приложении (для подсказок по навигации) =====
         private const string AppGuideStudent =
 @"Навигация студента (нижнее меню): 
 - «Дашборд»: рекомендованные вакансии, статусы откликов (На рассмотрении / Приглашён / Отклонён), счётчик сообщений (чаты), тарифы. 
@@ -216,17 +208,16 @@ namespace ProfNastavnik.Controllers
 Писать студентам первыми можно на корпоративном тарифе. Отклики ранжируются по баллам: навыки 25%, профессии 20%, завершённые стажировки 20%, рейтинг 25%, портфолио +10%. 
 Хорошая вакансия: понятное название, описание от 100 символов (задачи, чему научится стажёр), 3–7 конкретных навыков, указанная оплата и формат, срок.";
 
-        // ===== Системный промпт =====
         private string BuildSystemPrompt(string role, StudentCtx? s, CompanyCtx? c)
         {
             var sb = new StringBuilder();
             if (role == "company")
             {
-                sb.AppendLine("Ты — помощник компаний в приложении «Профнаставник» (подбор стажёров). Помогаешь составлять вакансии, оценивать отклики, выбирать стажёров, разбираться с тарифами и приложением.");
+                sb.AppendLine("Ты — помощник компаний в приложении «Воркшип» (подбор стажёров). Помогаешь составлять вакансии, оценивать отклики, выбирать стажёров, разбираться с тарифами и приложением.");
             }
             else
             {
-                sb.AppendLine("Ты — ИИ-рекрутер и карьерный наставник в приложении «Профнаставник» (платформа стажировок для студентов). Анализируешь профиль студента, честно говоришь, чего ему не хватает, какие навыки развить, как усилить портфолио и повысить шансы на стажировку. Также помогаешь с навигацией по приложению.");
+                sb.AppendLine("Ты — ИИ-рекрутер и карьерный наставник в приложении «Воркшип» (платформа стажировок для студентов). Анализируешь профиль студента, честно говоришь, чего ему не хватает, какие навыки развить, как усилить портфолио и повысить шансы на стажировку. Также помогаешь с навигацией по приложению.");
             }
             sb.AppendLine("Правила: отвечай по-русски, дружелюбно и по делу (обычно до 150 слов, если не попросили подробнее). " +
                           "Вопросы о приложении, профиле, вакансиях, откликах и карьере решай по данным ниже, ничего о пользователе или функциях приложения не выдумывай. " +
@@ -270,7 +261,6 @@ namespace ProfNastavnik.Controllers
             return sb.ToString();
         }
 
-        // ===== Вызов LLM (OpenAI-совместимый API) =====
         private async Task<string?> CallLlm(string system, List<AssistantMessageDto> history, string message)
         {
             string? key = _config["Assistant:ApiKey"] ?? Environment.GetEnvironmentVariable("ASSISTANT_API_KEY");
@@ -312,7 +302,6 @@ namespace ProfNastavnik.Controllers
             }
         }
 
-        // ===== Локальный ответ (если LLM недоступна) =====
         private static (string reply, List<string> suggestions) LocalStudent(string message, StudentCtx s)
         {
             string m = message.ToLowerInvariant();
@@ -379,7 +368,6 @@ namespace ProfNastavnik.Controllers
             return (AppGuideCompany, sug);
         }
 
-        // ===== POST api/Assistant/Chat =====
         [HttpPost("Chat")]
         public async Task<ActionResult> Chat([FromBody] AssistantRequestDto req)
         {
@@ -390,13 +378,11 @@ namespace ProfNastavnik.Controllers
             string message = req.Message.Trim();
             if (message.Length > 1000) message = message.Substring(0, 1000);
 
-            // Личность берём ИЗ ТОКЕНА, а не из тела запроса: нельзя запросить анализ чужого профиля
             var auth = AuthContext.Get(HttpContext);
             if (auth == null) return StatusCode(401, "Требуется авторизация");
             string role = auth.Role == "company" ? "company" : "student";
             int userId = auth.UserId;
 
-            // Чат-бот наставник входит в «Профи» (студенты) и «Бизнес»/«Корпоративный» (компании)
             if (auth.Role != "admin")
             {
                 using (var db = new ProfnastavnikContext())

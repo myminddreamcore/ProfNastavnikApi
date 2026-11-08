@@ -5,21 +5,15 @@ using System.Text.Json;
 
 namespace ProfNastavnik.Security
 {
-    /// <summary>Данные, зашитые в токен.</summary>
     public class AuthClaims
     {
-        public int UserId { get; set; }          // IdStudent / IdDirector / 1 для администратора
+        public int UserId { get; set; }       
         public string Email { get; set; } = "";
-        public string Role { get; set; } = "";   // "student" | "company" | "admin"
-        public long Exp { get; set; }            // unix-время окончания, сек
+        public string Role { get; set; } = "";  
+        public long Exp { get; set; }           
     }
 
-    /// <summary>
-    /// Подписанные токены (HMAC-SHA256), без БД и без доп. пакетов: "v1.{payload}.{signature}".
-    /// Секрет берётся из переменной окружения AUTH_SECRET или appsettings.json -> "Auth:Secret".
-    /// Если секрет не задан, генерируется случайный на время работы процесса
-    /// (после перезапуска сервера все пользователи просто войдут заново).
-    /// </summary>
+
     public static class TokenService
     {
         private static readonly byte[] Key = LoadKey();
@@ -38,7 +32,7 @@ namespace ProfNastavnik.Security
                         .Build();
                     secret = cfg["Auth:Secret"];
                 }
-                catch { /* игнорируем, возьмём случайный */ }
+                catch { }
             }
             if (string.IsNullOrWhiteSpace(secret) || secret.Length < 16)
             {
@@ -78,7 +72,6 @@ namespace ProfNastavnik.Security
             return body + "." + B64(Sign(body));
         }
 
-        /// <summary>Возвращает claims или null, если токен подделан/просрочен/некорректен.</summary>
         public static AuthClaims? Validate(string? token)
         {
             try

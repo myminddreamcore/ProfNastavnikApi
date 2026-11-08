@@ -8,11 +8,9 @@ using ProfNastavnik.Models;
 
 namespace ProfNastavnik.Controllers
 {
-    /// <summary>
-    /// Портфолио студента: список ссылок на работы. Хранится в существующей таблице student_files
-    /// (file_url = "Название||https://ссылка"), поэтому миграции БД не нужны.
-    /// </summary>
+  
     [Route("api/[controller]")]
+    [Route("api/v1/[controller]")]
     [ApiController]
     [TokenAuth]
     public class PortfolioController : ControllerBase
@@ -46,7 +44,6 @@ namespace ProfNastavnik.Controllers
                     Url = raw.Substring(i + Sep.Length)
                 };
             }
-            // старые записи без названия
             return new PortfolioItemDto { IdStudentFile = f.IdStudentFile, Title = raw, Url = raw };
         }
 

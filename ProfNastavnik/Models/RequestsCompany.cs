@@ -17,7 +17,6 @@ public partial class RequestsCompany
     public string? StatusFeedback { get; set; }
 
     public DateOnly? DateRequest { get; set; }
-
     [JsonIgnore]
     public virtual Director? IdCompanyNavigation { get; set; }
     [JsonIgnore]
